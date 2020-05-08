@@ -33,10 +33,22 @@ int verbose;
 //      Predictor Data Structures     //
 //------------------------------------//
 
-//
-//TODO: Add your own Branch Predictor data structures here
-//
+////////////////// gshare meta /////////////////////////////
+int      ghistoryLen; //TODO: currently assume to be [1, 32]
+uint32_t ghistory;
+uint8_t* gstate;
+uint32_t gmask;      // all-one mask on low bits
 
+void print_gmeta()
+{
+  printf("ghistoryLen: %d\n", ghistoryLen);
+  printf("ghistory:    %d\n", ghistory);
+  printf("gstate:\n");
+  int i;
+  for (i = 0; i < ghistoryLen; ++i) printf("%d  ", gstate[i]);
+  printf("\ngmask:     %d\n", gmask);
+}
+////////////////////////////////////////////////////////////
 
 //------------------------------------//
 //        Predictor Functions         //
@@ -47,9 +59,42 @@ int verbose;
 void
 init_predictor()
 {
-  //
-  //TODO: Initialize Branch Predictor Data Structures
-  //
+  ghistoryLen = 1;
+  gmask       = 1;
+  
+  int i;
+  for (i = 0; i < ghistoryBits; ++i)
+  {
+    ghistoryLen *= 2;
+    gmask        = (gmask << 1) | 1;
+  }
+
+  ghistory = 0;
+  gstate   = (uint8_t*) malloc(sizeof(uint8_t) * ghistoryLen);
+  for (i = 0; i < ghistoryLen; ++i)  gstate[i] = WN;
+
+  print_gmeta();
+}
+
+// Xor low bits of address and history
+// Return gstate at xor
+//
+uint8_t gshare_predict(uint32_t pc)
+{
+  uint32_t xor = (ghistory ^ pc) & (gmask);
+  return gstate[xor] <= WN ? NOTTAKEN : TAKEN;
+}
+
+// Update gstate first then ghistory 
+//
+void gshare_train(uint32_t pc, uint8_t outcome)
+{
+  uint32_t xor   = (ghistory ^ pc) & (gmask);
+  int flag       = (gstate[xor] == SN && outcome == NOTTAKEN) || (gstate[xor] == ST && outcome == TAKEN);
+  if (!flag && outcome == NOTTAKEN) --gstate[xor]; // avoid using -1 or +1 for type casting
+  if (!flag && outcome == TAKEN)    ++gstate[xor];
+
+  ghistory       = (ghistory << 1) | (outcome == NOTTAKEN ? 0 : 1);
 }
 
 // Make a prediction for conditional branch instruction at PC 'pc'
@@ -68,6 +113,7 @@ make_prediction(uint32_t pc)
     case STATIC:
       return TAKEN;
     case GSHARE:
+      return gshare_predict(pc);
     case TOURNAMENT:
     case CUSTOM:
     default:
@@ -85,7 +131,5 @@ make_prediction(uint32_t pc)
 void
 train_predictor(uint32_t pc, uint8_t outcome)
 {
-  //
-  //TODO: Implement Predictor training
-  //
+  gshare_train(pc, outcome);
 }
