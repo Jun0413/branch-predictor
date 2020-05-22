@@ -1,3 +1,4 @@
 *.o
 src/predictor
-mytest
+mytest/test
+mytest/test.c

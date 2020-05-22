@@ -66,21 +66,13 @@ void print_gmeta()
 //------------------------------------//
 void gshare_init()
 {
-  ghistoryLen = 1;
-  gmask       = 1;
+  ghistoryLen = 1 << ghistoryBits;
+  gmask       = (1 << ghistoryBits) - 1;
   
   int i;
-  for (i = 0; i < ghistoryBits; ++i)
-  {
-    ghistoryLen *= 2;
-    gmask        = (gmask << 1) | 1;
-  }
-
   ghistory = 0;
   gstate   = (uint8_t*) malloc(sizeof(uint8_t) * ghistoryLen);
   for (i = 0; i < ghistoryLen; ++i)  gstate[i] = WN;
-
-  print_gmeta();
 }
 
 // Xor low bits of address and history
