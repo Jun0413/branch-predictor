@@ -38,12 +38,6 @@ extern const char *bpName[];
 #define WT  2			// predict T, weak taken
 #define ST  3			// predict T, strong taken
 
-// Definitions for 2-bit choice predictor
-#define SG  0			// go for global
-#define WG  1			//
-#define WL  2			// go for local
-#define SL  3			//
-
 //------------------------------------//
 //      Predictor Configuration       //
 //------------------------------------//

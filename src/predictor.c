@@ -8,6 +8,12 @@
 #include <stdio.h>
 #include "predictor.h"
 
+// Definitions for 2-bit choice predictor
+#define SG  0			// go for global
+#define WG  1			//
+#define WL  2			// go for local
+#define SL  3			//
+
 //
 // TODO:Student Information
 //
