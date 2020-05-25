@@ -248,7 +248,7 @@ uint8_t perceptron_predict(uint32_t pc)
   
   int i;
   for (i = 1; i <= PERC_HIST_BITS; ++i)
-    y_out += (perc_global_history[i - 1] ? 1 : -1) * perc_table[index][i];
+    y_out += (perc_global_history[PERC_HIST_BITS - i] ? 1 : -1) * perc_table[index][i];
   
   perc_training_amount = (y_out >= 0 ? y_out : -y_out);
   
@@ -279,6 +279,7 @@ void perceptron_train(uint32_t pc, uint8_t outcome)
   if (perc_training_amount <= PERC_THRESHOLD || perc_last_pred != outcome)
   {
     for (i = 0; i <= PERC_HIST_BITS; ++i)
+    {
       if (i == 0) { delta = (outcome == TAKEN ? 1 : -1); }
       else
       {
@@ -288,6 +289,7 @@ void perceptron_train(uint32_t pc, uint8_t outcome)
         } else { delta = -1; }
       }
       perceptron_inc_weight(delta, index, i);
+    }
   }
 
   // update global history
