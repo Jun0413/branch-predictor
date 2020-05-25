@@ -14,6 +14,30 @@
 #define WL  2			// go for local
 #define SL  3			//
 
+// Macros for perceptron predictor
+#define PERC_ENTRIES    1024
+#define PERC_HIST_BITS  59
+#define PERC_THRESHOLD  128 // Threshold to decide if training needed
+                            // (int)(1.93*PERC_HIST_BITS+14)
+
+// Function prototypes
+void gshare_init();
+uint8_t gshare_predict(uint32_t pc);
+void gshare_train(uint32_t pc, uint8_t outcome);
+
+void tournament_init();
+uint8_t tournament_global_predict();
+uint8_t tournament_local_predict(uint32_t pc);
+uint8_t tournament_predict(uint32_t pc);
+void tournament_train(uint32_t pc, uint8_t outcome);
+
+void perceptron_init();
+static inline uint32_t perceptron_pc2index(uint32_t pc);
+uint8_t perceptron_predict(uint32_t pc);
+void perceptron_inc_weight(int delta, uint32_t i, uint32_t j);
+void perceptron_update_ghistory(uint8_t outcome);
+void perceptron_train(uint32_t pc, uint8_t outcome);
+
 //
 // TODO:Student Information
 //
@@ -45,6 +69,7 @@ uint32_t ghistory;
 uint8_t* gstate;
 uint32_t gmask;      // all-one mask on low bits
 
+
 ////////////////// tournament meta /////////////////////////////
 uint32_t  globalHistory;          // clean history
 uint32_t  globalHistoryMask;
@@ -60,12 +85,13 @@ int       localBHTLen;
 
 uint8_t*  chooser;
 
-void print_tmeta() {
-  printf("globalBHTLen: %d\n", globalBHTLen);
-  printf("localHistoryTableLen: %d\n", localHistoryTableLen);
-  printf("localBHTLen: %d\n", localBHTLen);
-}
-////////////////////////////////////////////////////////////
+
+////////////////// perceptron meta /////////////////////////////
+uint8_t   perc_global_history[PERC_HIST_BITS];
+int       perc_table[PERC_ENTRIES][1 + PERC_HIST_BITS];
+uint32_t  perc_training_amount;
+uint8_t   perc_last_pred;
+
 
 //------------------------------------//
 //        gshare functions            //
@@ -186,6 +212,88 @@ void tournament_train(uint32_t pc, uint8_t outcome)
 
 }
 
+//------------------------------------//
+//        perceptron functions        //
+//------------------------------------//
+void perceptron_init()
+{
+  int i, j;
+  for (i = 0; i < PERC_HIST_BITS; ++i) { perc_global_history[i] = 0; }
+  for (i = 0; i < PERC_ENTRIES; ++i)
+    for (j = 0; j <= PERC_HIST_BITS; ++j)
+      perc_table[i][j] = 0;
+
+  perc_training_amount = 0;
+  perc_last_pred = NOTTAKEN;
+}
+
+// TODO: require PERC_HIST_BITS <= 64 && >= 31
+//
+static inline uint32_t perceptron_pc2index(uint32_t pc)
+{
+  uint32_t _ghistory = 0;
+  int _i;
+  for (_i = PERC_HIST_BITS - 1; _i >= PERC_HIST_BITS - 31; --_i)
+  {
+    _ghistory = (perc_global_history[_i] ? 1 : 0) | _ghistory;
+    _ghistory = _ghistory << 1;
+  }
+  return (_ghistory % PERC_ENTRIES) ^ (pc % PERC_ENTRIES);
+}
+
+uint8_t perceptron_predict(uint32_t pc)
+{
+  uint32_t index = perceptron_pc2index(pc);
+  int y_out = perc_table[index][0]; // bias
+  
+  int i;
+  for (i = 1; i <= PERC_HIST_BITS; ++i)
+    y_out += (perc_global_history[i - 1] ? 1 : -1) * perc_table[index][i];
+  
+  perc_training_amount = (y_out >= 0 ? y_out : -y_out);
+  
+  perc_last_pred = (y_out >= 0 ? TAKEN : NOTTAKEN);
+  return perc_last_pred;
+}
+
+void perceptron_inc_weight(int delta, uint32_t i, uint32_t j)
+{
+  perc_table[i][j] += delta;
+  if (perc_table[i][j] >  PERC_THRESHOLD) { perc_table[i][j] =  PERC_THRESHOLD; }
+  if (perc_table[i][j] < -PERC_THRESHOLD) { perc_table[i][j] = -PERC_THRESHOLD; }
+}
+
+void perceptron_update_ghistory(uint8_t outcome)
+{
+  int i;
+  for (i = PERC_HIST_BITS - 1; i > 0; --i)
+    perc_global_history[i - 1] = perc_global_history[i];
+  perc_global_history[PERC_HIST_BITS - 1] = outcome;
+}
+
+void perceptron_train(uint32_t pc, uint8_t outcome)
+{
+  uint32_t i, index = perceptron_pc2index(pc);
+  int delta;
+  // update weights within [-THRESHOLD, +THRESHOLD]
+  if (perc_training_amount <= PERC_THRESHOLD || perc_last_pred != outcome)
+  {
+    for (i = 0; i <= PERC_HIST_BITS; ++i)
+      if (i == 0) { delta = (outcome == TAKEN ? 1 : -1); }
+      else
+      {
+        if ((perc_global_history[i - 1] && outcome == TAKEN)
+        || (!perc_global_history[i - 1] && outcome == NOTTAKEN)) {
+          delta = 1;
+        } else { delta = -1; }
+      }
+      perceptron_inc_weight(delta, index, i);
+  }
+
+  // update global history
+  perceptron_update_ghistory(outcome);
+}
+
 
 
 //------------------------------------//
@@ -207,6 +315,7 @@ init_predictor()
       tournament_init();
       return;
     case CUSTOM:
+      perceptron_init();
       return;
     default:
       break;
@@ -233,6 +342,7 @@ make_prediction(uint32_t pc)
     case TOURNAMENT:
       return tournament_predict(pc);
     case CUSTOM:
+      return perceptron_predict(pc);
     default:
       break;
   }
@@ -258,6 +368,7 @@ train_predictor(uint32_t pc, uint8_t outcome)
       tournament_train(pc, outcome);
       return;
     case CUSTOM:
+      perceptron_train(pc, outcome);
       return;
     default:
       break;
