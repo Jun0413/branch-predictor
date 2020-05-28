@@ -266,7 +266,7 @@ void perceptron_inc_weight(int delta, uint32_t i, uint32_t j)
 void perceptron_update_ghistory(uint8_t outcome)
 {
   int i;
-  for (i = PERC_HIST_BITS - 1; i > 0; --i)
+  for (i = 1; i < PERC_HIST_BITS; ++i)
     perc_global_history[i - 1] = perc_global_history[i];
   perc_global_history[PERC_HIST_BITS - 1] = outcome;
 }
