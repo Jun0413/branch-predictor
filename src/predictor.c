@@ -87,10 +87,10 @@ uint8_t*  chooser;
 
 
 ////////////////// perceptron meta /////////////////////////////
-uint8_t   perc_global_history[PERC_HIST_BITS];
-int       perc_table[PERC_ENTRIES][1 + PERC_HIST_BITS];
-int       perc_training_amount;
-uint8_t   perc_last_pred;
+uint8_t   perc_global_history[PERC_HIST_BITS];          // LSB as the most recent outcome
+int       perc_table[PERC_ENTRIES][1 + PERC_HIST_BITS]; // a table of perceptrons
+int       perc_training_amount;                         // absolute perceptron output each time
+uint8_t   perc_last_pred;                               // last prediction result
 
 
 //------------------------------------//
@@ -227,8 +227,6 @@ void perceptron_init()
   perc_last_pred = NOTTAKEN;
 }
 
-// TODO: require PERC_HIST_BITS <= 64 && >= 31
-//
 static inline uint32_t perceptron_pc2index(uint32_t pc)
 {
   uint32_t _ghistory = 0;
