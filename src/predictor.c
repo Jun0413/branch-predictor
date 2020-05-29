@@ -17,7 +17,7 @@
 // Macros for perceptron predictor
 #define PERC_ENTRIES    1024
 #define PERC_HIST_BITS  59
-#define PERC_THRESHOLD  128 // Threshold to decide if training needed
+#define PERC_THRESHOLD  127 // Threshold to decide if training needed
                             // (int)(1.93*PERC_HIST_BITS+14)
 
 // Function prototypes
@@ -89,7 +89,7 @@ uint8_t*  chooser;
 ////////////////// perceptron meta /////////////////////////////
 uint8_t   perc_global_history[PERC_HIST_BITS];
 int       perc_table[PERC_ENTRIES][1 + PERC_HIST_BITS];
-uint32_t  perc_training_amount;
+int       perc_training_amount;
 uint8_t   perc_last_pred;
 
 
@@ -233,7 +233,7 @@ static inline uint32_t perceptron_pc2index(uint32_t pc)
 {
   uint32_t _ghistory = 0;
   int _i;
-  for (_i = PERC_HIST_BITS - 1; _i >= PERC_HIST_BITS - 31; --_i)
+  for (_i = PERC_HIST_BITS - 1; _i >= PERC_HIST_BITS - 32; --_i)
   {
     _ghistory = (perc_global_history[_i] ? 1 : 0) | _ghistory;
     _ghistory = _ghistory << 1;
@@ -283,8 +283,8 @@ void perceptron_train(uint32_t pc, uint8_t outcome)
       if (i == 0) { delta = (outcome == TAKEN ? 1 : -1); }
       else
       {
-        if ((perc_global_history[i - 1] && outcome == TAKEN)
-        || (!perc_global_history[i - 1] && outcome == NOTTAKEN)) {
+        if ((perc_global_history[PERC_HIST_BITS - i] == 1 && outcome == TAKEN)
+        || (perc_global_history[PERC_HIST_BITS - i] == 0 && outcome == NOTTAKEN)) {
           delta = 1;
         } else { delta = -1; }
       }
