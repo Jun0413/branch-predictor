@@ -153,6 +153,7 @@ void tournament_init()
   for (int i = 0; i < globalBHTLen; ++i)  chooser[i] = WG;
 
   // print_tmeta();
+
 }
 
 uint8_t tournament_global_predict()
@@ -165,6 +166,7 @@ uint8_t tournament_local_predict(uint32_t pc)
   uint32_t index        = pc & localPCMask;
   uint32_t localHistory = localHistoryTable[index];
   return localBHT[localHistory] <= WN ? NOTTAKEN : TAKEN;
+
 }
 
 uint8_t tournament_predict(uint32_t pc)
@@ -213,7 +215,7 @@ void tournament_train(uint32_t pc, uint8_t outcome)
 }
 
 //------------------------------------//
-//        perceptron functions        //
+//          custom functions          //
 //------------------------------------//
 void perceptron_init()
 {
@@ -221,7 +223,7 @@ void perceptron_init()
   for (i = 0; i < PERC_HIST_BITS; ++i) { perc_global_history[i] = 0; }
   for (i = 0; i < PERC_ENTRIES; ++i)
     for (j = 0; j <= PERC_HIST_BITS; ++j)
-      perc_table[i][j] = 0;
+      perc_table[i][j] = 1.5;
 
   perc_training_amount = 0;
   perc_last_pred = NOTTAKEN;
@@ -294,6 +296,59 @@ void perceptron_train(uint32_t pc, uint8_t outcome)
   perceptron_update_ghistory(outcome);
 }
 
+void custom_init()
+{
+  ghistoryBits = 9;
+  lhistoryBits = 9;
+  pcIndexBits = 10;
+
+
+  globalHistory     = 0;
+  globalHistoryMask = (1 << ghistoryBits) - 1;
+  globalBHTLen      = 1 << ghistoryBits;
+  globalBHT         = (uint8_t*) malloc(sizeof(uint8_t) * globalBHTLen);
+  for (int i = 0; i < globalBHTLen; ++i)     globalBHT[i] = WN;
+
+  chooser = (uint8_t*) malloc(sizeof(uint8_t) * globalBHTLen);
+  for (int i = 0; i < globalBHTLen; ++i)  chooser[i] = WG;
+
+  perceptron_init();
+}
+
+uint8_t custom_predict(uint32_t pc)
+{
+  uint8_t choice = chooser[globalHistory];
+  return choice <= WG ? tournament_global_predict() : perceptron_predict(pc);
+}
+
+void custom_train(uint32_t pc, uint8_t outcome)
+{
+  uint8_t globalOutcome = tournament_global_predict();
+  uint8_t localOutcome  = perceptron_predict(pc);
+
+  // train chooser
+  if (globalOutcome != localOutcome) {   
+    if (globalOutcome == outcome) {                   // global is correct
+      if (chooser[globalHistory] != SG) {
+        chooser[globalHistory]--;
+      }
+    } else if (localOutcome == outcome) {            // local is correct
+      if (chooser[globalHistory] != SL) {
+        chooser[globalHistory]++;
+      }
+    }
+  }
+
+  // train global predictor
+  if (TAKEN == outcome) {                     // global is correct
+    if (globalBHT[globalHistory] != ST) { ++globalBHT[globalHistory]; }
+  } else {                                            // global is wrong
+    if (globalBHT[globalHistory] != SN) { --globalBHT[globalHistory]; }
+  }
+  globalHistory = ((globalHistory << 1) | (outcome == NOTTAKEN ? 0 : 1)) & globalHistoryMask;
+
+  perceptron_train(pc, outcome);
+}
 
 
 //------------------------------------//
@@ -315,7 +370,7 @@ init_predictor()
       tournament_init();
       return;
     case CUSTOM:
-      perceptron_init();
+      custom_init();
       return;
     default:
       break;
@@ -342,7 +397,7 @@ make_prediction(uint32_t pc)
     case TOURNAMENT:
       return tournament_predict(pc);
     case CUSTOM:
-      return perceptron_predict(pc);
+      return custom_predict(pc);
     default:
       break;
   }
@@ -368,7 +423,7 @@ train_predictor(uint32_t pc, uint8_t outcome)
       tournament_train(pc, outcome);
       return;
     case CUSTOM:
-      perceptron_train(pc, outcome);
+      custom_train(pc, outcome);
       return;
     default:
       break;
