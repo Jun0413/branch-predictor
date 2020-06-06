@@ -16,9 +16,10 @@
 
 // Macros for perceptron predictor
 #define PERC_ENTRIES    1024
-#define PERC_HIST_BITS  59
-#define PERC_THRESHOLD  127 // Threshold to decide if training needed
+#define PERC_HIST_BITS  62
+#define PERC_TTHRESHOLD 133 // Threshold to decide if training needed
                             // (int)(1.93*PERC_HIST_BITS+14)
+#define PERC_WTHRESHOLD 128 // Threshold for 8-bit signed weights
 
 // Function prototypes
 void gshare_init();
@@ -38,12 +39,10 @@ void perceptron_inc_weight(int delta, uint32_t i, uint32_t j);
 void perceptron_update_ghistory(uint8_t outcome);
 void perceptron_train(uint32_t pc, uint8_t outcome);
 
-//
-// TODO:Student Information
-//
-const char *studentName = "NAME";
-const char *studentID   = "PID";
-const char *email       = "EMAIL";
+
+const char *studentName = "Junhao Zeng; Sixuan Feng";
+const char *studentID   = "A53318133; A53275766";
+const char *email       = "j4zeng@eng.ucsd.edu; sfeng@eng.ucsd.edu";
 
 //------------------------------------//
 //      Predictor Configuration       //
@@ -64,10 +63,10 @@ int verbose;
 //------------------------------------//
 
 ////////////////// gshare meta /////////////////////////////
-int      ghistoryLen; //TODO: currently assume to be [1, 32]
+int      ghistoryLen;
 uint32_t ghistory;
 uint8_t* gstate;
-uint32_t gmask;      // all-one mask on low bits
+uint32_t gmask;                   // all-one mask on low bits
 
 
 ////////////////// tournament meta /////////////////////////////
@@ -223,7 +222,7 @@ void perceptron_init()
   for (i = 0; i < PERC_HIST_BITS; ++i) { perc_global_history[i] = 0; }
   for (i = 0; i < PERC_ENTRIES; ++i)
     for (j = 0; j <= PERC_HIST_BITS; ++j)
-      perc_table[i][j] = 1.5;
+      perc_table[i][j] = 0;
 
   perc_training_amount = 0;
   perc_last_pred = NOTTAKEN;
@@ -259,8 +258,8 @@ uint8_t perceptron_predict(uint32_t pc)
 void perceptron_inc_weight(int delta, uint32_t i, uint32_t j)
 {
   perc_table[i][j] += delta;
-  if (perc_table[i][j] >  PERC_THRESHOLD) { perc_table[i][j] =  PERC_THRESHOLD; }
-  if (perc_table[i][j] < -PERC_THRESHOLD) { perc_table[i][j] = -PERC_THRESHOLD; }
+  if (perc_table[i][j] >=  PERC_WTHRESHOLD) { perc_table[i][j] =  PERC_WTHRESHOLD - 1; }
+  if (perc_table[i][j] <  -PERC_WTHRESHOLD) { perc_table[i][j] = -PERC_WTHRESHOLD; }
 }
 
 void perceptron_update_ghistory(uint8_t outcome)
@@ -276,7 +275,7 @@ void perceptron_train(uint32_t pc, uint8_t outcome)
   uint32_t i, index = perceptron_pc2index(pc);
   int delta;
   // update weights within [-THRESHOLD, +THRESHOLD]
-  if (perc_training_amount <= PERC_THRESHOLD || perc_last_pred != outcome)
+  if (perc_training_amount <= PERC_TTHRESHOLD || perc_last_pred != outcome)
   {
     for (i = 0; i <= PERC_HIST_BITS; ++i)
     {
@@ -328,7 +327,7 @@ void custom_train(uint32_t pc, uint8_t outcome)
 
   // train chooser
   if (globalOutcome != localOutcome) {   
-    if (globalOutcome == outcome) {                   // global is correct
+    if (globalOutcome == outcome) {                  // global is correct
       if (chooser[globalHistory] != SG) {
         chooser[globalHistory]--;
       }
@@ -340,9 +339,9 @@ void custom_train(uint32_t pc, uint8_t outcome)
   }
 
   // train global predictor
-  if (TAKEN == outcome) {                     // global is correct
+  if (TAKEN == outcome) {                            // global is correct
     if (globalBHT[globalHistory] != ST) { ++globalBHT[globalHistory]; }
-  } else {                                            // global is wrong
+  } else {                                           // global is wrong
     if (globalBHT[globalHistory] != SN) { --globalBHT[globalHistory]; }
   }
   globalHistory = ((globalHistory << 1) | (outcome == NOTTAKEN ? 0 : 1)) & globalHistoryMask;
@@ -371,6 +370,7 @@ init_predictor()
       return;
     case CUSTOM:
       custom_init();
+      // perceptron_init();
       return;
     default:
       break;
@@ -384,11 +384,6 @@ init_predictor()
 uint8_t
 make_prediction(uint32_t pc)
 {
-  //
-  //TODO: Implement prediction scheme
-  //
-
-  // Make a prediction based on the bpType
   switch (bpType) {
     case STATIC:
       return TAKEN;
@@ -398,6 +393,7 @@ make_prediction(uint32_t pc)
       return tournament_predict(pc);
     case CUSTOM:
       return custom_predict(pc);
+      // return perceptron_predict(pc);
     default:
       break;
   }
@@ -424,6 +420,7 @@ train_predictor(uint32_t pc, uint8_t outcome)
       return;
     case CUSTOM:
       custom_train(pc, outcome);
+      // perceptron_train(pc, outcome);
       return;
     default:
       break;
