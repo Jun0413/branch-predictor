@@ -15,11 +15,11 @@
 #define SL  3			//
 
 // Macros for perceptron predictor
-#define PERC_ENTRIES    1024
-#define PERC_HIST_BITS  62
-#define PERC_TTHRESHOLD 133 // Threshold to decide if training needed
+#define PERC_ENTRIES    256
+#define PERC_HIST_BITS  32
+#define PERC_TTHRESHOLD 75 // Threshold to decide if training needed
                             // (int)(1.93*PERC_HIST_BITS+14)
-#define PERC_WTHRESHOLD 128 // Threshold for 8-bit signed weights
+#define PERC_WTHRESHOLD 64 // Threshold for 8-bit signed weights
 
 // Function prototypes
 void gshare_init();
@@ -27,10 +27,10 @@ uint8_t gshare_predict(uint32_t pc);
 void gshare_train(uint32_t pc, uint8_t outcome);
 
 void tournament_init();
-uint8_t tournament_global_predict();
+uint8_t tournament_global_predict(uint32_t pc, int flag);
 uint8_t tournament_local_predict(uint32_t pc);
-uint8_t tournament_predict(uint32_t pc);
-void tournament_train(uint32_t pc, uint8_t outcome);
+uint8_t tournament_predict(uint32_t pc, int flag);
+void tournament_train(uint32_t pc, uint8_t outcome, int flag);
 
 void perceptron_init();
 static inline uint32_t perceptron_pc2index(uint32_t pc);
@@ -155,9 +155,14 @@ void tournament_init()
 
 }
 
-uint8_t tournament_global_predict()
+uint8_t tournament_global_predict(uint32_t pc, int flag)
 {
-  return globalBHT[globalHistory] <= WN ? NOTTAKEN : TAKEN;
+  if (flag) {
+    uint32_t xor = (globalHistory ^ pc) & (globalHistoryMask);
+    return globalBHT[xor] <= WN ? NOTTAKEN : TAKEN;
+  } else {
+    return globalBHT[globalHistory] <= WN ? NOTTAKEN : TAKEN;
+  }
 }
 
 uint8_t tournament_local_predict(uint32_t pc)
@@ -168,15 +173,15 @@ uint8_t tournament_local_predict(uint32_t pc)
 
 }
 
-uint8_t tournament_predict(uint32_t pc)
+uint8_t tournament_predict(uint32_t pc, int flag)
 {
   uint8_t choice = chooser[globalHistory];
-  return choice <= WG ? tournament_global_predict() : tournament_local_predict(pc);
+  return choice <= WG ? tournament_global_predict(pc, flag) : tournament_local_predict(pc);
 }
 
-void tournament_train(uint32_t pc, uint8_t outcome)
+void tournament_train(uint32_t pc, uint8_t outcome, int flag)
 {
-  uint8_t globalOutcome = tournament_global_predict();
+  uint8_t globalOutcome = tournament_global_predict(pc, flag);
   uint8_t localOutcome  = tournament_local_predict(pc);
 
   // train chooser
@@ -193,10 +198,19 @@ void tournament_train(uint32_t pc, uint8_t outcome)
   }
 
   // train global predictor
-  if (TAKEN == outcome) {                     // global is correct
-    if (globalBHT[globalHistory] != ST) { ++globalBHT[globalHistory]; }
-  } else {                                            // global is wrong
-    if (globalBHT[globalHistory] != SN) { --globalBHT[globalHistory]; }
+  if (flag) {
+    uint32_t xor = (globalHistory ^ pc) & (globalHistoryMask);
+    if (TAKEN == outcome) {                     // global is correct
+      if (globalBHT[xor] != ST) { ++globalBHT[xor]; }
+    } else {                                            // global is wrong
+      if (globalBHT[xor] != SN) { --globalBHT[xor]; }
+    }
+  } else {
+    if (TAKEN == outcome) {                     // global is correct
+      if (globalBHT[globalHistory] != ST) { ++globalBHT[globalHistory]; }
+    } else {                                            // global is wrong
+      if (globalBHT[globalHistory] != SN) { --globalBHT[globalHistory]; }
+    }
   }
   globalHistory = ((globalHistory << 1) | (outcome == NOTTAKEN ? 0 : 1)) & globalHistoryMask;
 
@@ -222,7 +236,7 @@ void perceptron_init()
   for (i = 0; i < PERC_HIST_BITS; ++i) { perc_global_history[i] = 0; }
   for (i = 0; i < PERC_ENTRIES; ++i)
     for (j = 0; j <= PERC_HIST_BITS; ++j)
-      perc_table[i][j] = 0;
+      perc_table[i][j] = 1.5;
 
   perc_training_amount = 0;
   perc_last_pred = NOTTAKEN;
@@ -230,14 +244,15 @@ void perceptron_init()
 
 static inline uint32_t perceptron_pc2index(uint32_t pc)
 {
-  uint32_t _ghistory = 0;
-  int _i;
-  for (_i = PERC_HIST_BITS - 1; _i >= PERC_HIST_BITS - 32; --_i)
-  {
-    _ghistory = (perc_global_history[_i] ? 1 : 0) | _ghistory;
-    _ghistory = _ghistory << 1;
-  }
-  return (_ghistory % PERC_ENTRIES) ^ (pc % PERC_ENTRIES);
+  // uint32_t _ghistory = 0;
+  // int _i;
+  // for (_i = PERC_HIST_BITS - 1; _i >= PERC_HIST_BITS - 32; --_i)
+  // {
+  //   _ghistory = (perc_global_history[_i] ? 1 : 0) | _ghistory;
+  //   _ghistory = _ghistory << 1;
+  // }
+  // return (_ghistory % PERC_ENTRIES) ^ (pc % PERC_ENTRIES);
+  return pc % PERC_ENTRIES;
 }
 
 uint8_t perceptron_predict(uint32_t pc)
@@ -297,7 +312,7 @@ void perceptron_train(uint32_t pc, uint8_t outcome)
 
 void custom_init()
 {
-  ghistoryBits = 9;
+  ghistoryBits = 10;
   lhistoryBits = 9;
   pcIndexBits = 10;
 
@@ -314,15 +329,15 @@ void custom_init()
   perceptron_init();
 }
 
-uint8_t custom_predict(uint32_t pc)
+uint8_t custom_predict(uint32_t pc, int flag)
 {
   uint8_t choice = chooser[globalHistory];
-  return choice <= WG ? tournament_global_predict() : perceptron_predict(pc);
+  return choice <= WG ? tournament_global_predict(pc, flag) : perceptron_predict(pc);
 }
 
-void custom_train(uint32_t pc, uint8_t outcome)
+void custom_train(uint32_t pc, uint8_t outcome, int flag)
 {
-  uint8_t globalOutcome = tournament_global_predict();
+  uint8_t globalOutcome = tournament_global_predict(pc, flag);
   uint8_t localOutcome  = perceptron_predict(pc);
 
   // train chooser
@@ -369,8 +384,8 @@ init_predictor()
       tournament_init();
       return;
     case CUSTOM:
-      custom_init();
-      // perceptron_init();
+      // custom_init();
+      perceptron_init();
       return;
     default:
       break;
@@ -390,10 +405,10 @@ make_prediction(uint32_t pc)
     case GSHARE:
       return gshare_predict(pc);
     case TOURNAMENT:
-      return tournament_predict(pc);
+      return tournament_predict(pc, 0);
     case CUSTOM:
-      return custom_predict(pc);
-      // return perceptron_predict(pc);
+      // return custom_predict(pc, 0);
+      return perceptron_predict(pc);
     default:
       break;
   }
@@ -416,11 +431,11 @@ train_predictor(uint32_t pc, uint8_t outcome)
       gshare_train(pc, outcome);
       return;
     case TOURNAMENT:
-      tournament_train(pc, outcome);
+      tournament_train(pc, outcome, 0);
       return;
     case CUSTOM:
-      custom_train(pc, outcome);
-      // perceptron_train(pc, outcome);
+      // custom_train(pc, outcome, 0);
+      perceptron_train(pc, outcome);
       return;
     default:
       break;

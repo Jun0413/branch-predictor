@@ -1,0 +1,27 @@
+fp_1
+Branches:           1546797
+Incorrect:            12678
+Misprediction Rate:   0.820
+fp_2
+Branches:           2422049
+Incorrect:            30127
+Misprediction Rate:   1.244
+int_1
+Branches:           3771697
+Incorrect:           319658
+Misprediction Rate:   8.475
+int_2
+Branches:           3755315
+Incorrect:            11308
+Misprediction Rate:   0.301
+mm_1
+Branches:           3014850
+Incorrect:            66997
+Misprediction Rate:   2.222
+mm_2
+Branches:           2563897
+Incorrect:           187052
+Misprediction Rate:   7.296
+
+===
+avg = (0.820 + 1.244 + 8.475 + 0.301 + 2.222 + 7.296) / 6 = 3.393
