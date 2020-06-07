@@ -19,7 +19,7 @@
 #define PERC_HIST_BITS  32
 #define PERC_TTHRESHOLD 75 // Threshold to decide if training needed
                             // (int)(1.93*PERC_HIST_BITS+14)
-#define PERC_WTHRESHOLD 64 // Threshold for 8-bit signed weights
+#define PERC_WTHRESHOLD 64 // Threshold for 7-bit signed weights
 
 // Function prototypes
 void gshare_init();
@@ -27,10 +27,10 @@ uint8_t gshare_predict(uint32_t pc);
 void gshare_train(uint32_t pc, uint8_t outcome);
 
 void tournament_init();
-uint8_t tournament_global_predict(uint32_t pc, int flag);
+uint8_t tournament_global_predict(uint32_t pc);
 uint8_t tournament_local_predict(uint32_t pc);
-uint8_t tournament_predict(uint32_t pc, int flag);
-void tournament_train(uint32_t pc, uint8_t outcome, int flag);
+uint8_t tournament_predict(uint32_t pc);
+void tournament_train(uint32_t pc, uint8_t outcome);
 
 void perceptron_init();
 static inline uint32_t perceptron_pc2index(uint32_t pc);
@@ -152,14 +152,9 @@ void tournament_init()
   for (int i = 0; i < globalBHTLen; ++i)  chooser[i] = WG;
 }
 
-uint8_t tournament_global_predict(uint32_t pc, int flag)
+uint8_t tournament_global_predict(uint32_t pc)
 {
-  if (flag) {
-    uint32_t xor = (globalHistory ^ pc) & (globalHistoryMask);
-    return globalBHT[xor] <= WN ? NOTTAKEN : TAKEN;
-  } else {
-    return globalBHT[globalHistory] <= WN ? NOTTAKEN : TAKEN;
-  }
+  return globalBHT[globalHistory] <= WN ? NOTTAKEN : TAKEN;
 }
 
 uint8_t tournament_local_predict(uint32_t pc)
@@ -170,15 +165,15 @@ uint8_t tournament_local_predict(uint32_t pc)
 
 }
 
-uint8_t tournament_predict(uint32_t pc, int flag)
+uint8_t tournament_predict(uint32_t pc)
 {
   uint8_t choice = chooser[globalHistory];
-  return choice <= WG ? tournament_global_predict(pc, flag) : tournament_local_predict(pc);
+  return choice <= WG ? tournament_global_predict(pc) : tournament_local_predict(pc);
 }
 
-void tournament_train(uint32_t pc, uint8_t outcome, int flag)
+void tournament_train(uint32_t pc, uint8_t outcome)
 {
-  uint8_t globalOutcome = tournament_global_predict(pc, flag);
+  uint8_t globalOutcome = tournament_global_predict(pc);
   uint8_t localOutcome  = tournament_local_predict(pc);
 
   // train chooser
@@ -195,19 +190,10 @@ void tournament_train(uint32_t pc, uint8_t outcome, int flag)
   }
 
   // train global predictor
-  if (flag) {
-    uint32_t xor = (globalHistory ^ pc) & (globalHistoryMask);
-    if (TAKEN == outcome) {                     // global is correct
-      if (globalBHT[xor] != ST) { ++globalBHT[xor]; }
-    } else {                                            // global is wrong
-      if (globalBHT[xor] != SN) { --globalBHT[xor]; }
-    }
-  } else {
-    if (TAKEN == outcome) {                     // global is correct
-      if (globalBHT[globalHistory] != ST) { ++globalBHT[globalHistory]; }
-    } else {                                            // global is wrong
-      if (globalBHT[globalHistory] != SN) { --globalBHT[globalHistory]; }
-    }
+  if (TAKEN == outcome) {                     // global is correct
+    if (globalBHT[globalHistory] != ST) { ++globalBHT[globalHistory]; }
+  } else {                                            // global is wrong
+    if (globalBHT[globalHistory] != SN) { --globalBHT[globalHistory]; }
   }
   globalHistory = ((globalHistory << 1) | (outcome == NOTTAKEN ? 0 : 1)) & globalHistoryMask;
 
@@ -339,7 +325,7 @@ make_prediction(uint32_t pc)
     case GSHARE:
       return gshare_predict(pc);
     case TOURNAMENT:
-      return tournament_predict(pc, 0);
+      return tournament_predict(pc);
     case CUSTOM:
       return perceptron_predict(pc);
     default:
@@ -364,7 +350,7 @@ train_predictor(uint32_t pc, uint8_t outcome)
       gshare_train(pc, outcome);
       return;
     case TOURNAMENT:
-      tournament_train(pc, outcome, 0);
+      tournament_train(pc, outcome);
       return;
     case CUSTOM:
       perceptron_train(pc, outcome);
