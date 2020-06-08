@@ -219,7 +219,7 @@ void perceptron_init()
   for (i = 0; i < PERC_HIST_BITS; ++i) { perc_global_history[i] = 0; }
   for (i = 0; i < PERC_ENTRIES; ++i)
     for (j = 0; j <= PERC_HIST_BITS; ++j)
-      perc_table[i][j] = 1.5;
+      perc_table[i][j] = 1;
 
   perc_training_amount = 0;
   perc_last_pred = NOTTAKEN;
